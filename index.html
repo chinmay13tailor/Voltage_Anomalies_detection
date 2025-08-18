@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Voltage Anomaly Report</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 10px;
+      background: #f7f7f7;
+    }
+    .container {
+      width: 98%;
+      margin: auto;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .card {
+      background: white;
+      padding: 15px;
+      text-align: center;
+      border-radius: 6px;
+      box-shadow: 0px 1px 4px rgba(0,0,0,0.1);
+    }
+    .charts {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+    .charts.vertical {
+      grid-template-columns: 1fr;
+    }
+    .table-container {
+      background: white;
+      padding: 10px;
+      border-radius: 6px;
+      box-shadow: 0px 1px 4px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 12px;
+    }
+    table, th, td {
+      border: 1px solid #ddd;
+    }
+    th, td {
+      padding: 6px;
+      text-align: center;
+    }
+    .export-btn {
+      display: block;
+      margin: 15px auto;
+      padding: 10px 20px;
+      background: #007BFF;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .export-btn:hover {
+      background: #0056b3;
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="reportContent">
+    <h1>Voltage Anomaly Report</h1>
+
+    <div class="summary">
+      <div class="card"><h3 id="avgVpu">Avg Vpu</h3></div>
+      <div class="card"><h3 id="minVpu">Min Vpu</h3></div>
+      <div class="card"><h3 id="maxVpu">Max Vpu</h3></div>
+      <div class="card"><h3 id="sagSwell">Sags/Swells</h3></div>
+    </div>
+
+    <!-- Page 1 -->
+    <div class="charts">
+      <div id="vpuTrend"></div>
+      <div id="freqTrend"></div>
+    </div>
+
+    <!-- Page 2 -->
+    <div class="charts vertical">
+      <div id="currentTrend"></div>
+      <div class="table-container">
+        <h3>Events Log (Per Minute)</h3>
+        <table id="eventTable">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>R_Voltage</th>
+              <th>Y_Voltage</th>
+              <th>B_Voltage</th>
+              <th>Vpu_R</th>
+              <th>Vpu_Y</th>
+              <th>Vpu_B</th>
+              <th>Event</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <button class="export-btn" onclick="exportPDF()">Export Report as PDF</button>
+
+  <script>
+    const deviceId = "a41ff8c0-ce7c-11ef-826c-29d63551db41";
+    const baseUrl = "https://plantwiz.pimateck.in";
+    const nominalVoltage = 415;
+
+    // --- Mock fetch (replace with ThingsBoard API call using JWT) ---
+    async function fetchTelemetry() {
+      let data = [];
+      const now = new Date();
+      for (let i = 0; i < 120; i++) { // 2 hours sample
+        const t = new Date(now.getTime() - i * 60000);
+        const RV = 400 + (Math.random() * 50 - 25);
+        const YV = 410 + (Math.random() * 50 - 25);
+        const BV = 420 + (Math.random() * 50 - 25);
+        const freq = 50 + (Math.random() * 0.5 - 0.25);
+        const RC = 100 + Math.random() * 10;
+        const YC = 105 + Math.random() * 10;
+        const BC = 95 + Math.random() * 10;
+
+        data.push({
+          time: t,
+          R_Voltage: RV,
+          Y_Voltage: YV,
+          B_Voltage: BV,
+          Frequency: freq,
+          R_Current: RC,
+          Y_Current: YC,
+          B_Current: BC,
+          Vpu_R: RV / nominalVoltage,
+          Vpu_Y: YV / nominalVoltage,
+          Vpu_B: BV / nominalVoltage,
+        });
+      }
+      return data.reverse();
+    }
+
+    function detectEvent(vpuR, vpuY, vpuB) {
+      let status = "Normal";
+      [vpuR, vpuY, vpuB].forEach(v => {
+        if (v < 0.9) status = "Sag";
+        if (v > 1.1) status = "Swell";
+      });
+      return status;
+    }
+
+    function renderCharts(data) {
+      // Summary
+      const avgV = ((data.reduce((a, b) => a + b.Vpu_R + b.Vpu_Y + b.Vpu_B, 0)) / (data.length * 3)).toFixed(2);
+      const minV = Math.min(...data.map(d => Math.min(d.Vpu_R, d.Vpu_Y, d.Vpu_B))).toFixed(2);
+      const maxV = Math.max(...data.map(d => Math.max(d.Vpu_R, d.Vpu_Y, d.Vpu_B))).toFixed(2);
+      const sags = data.filter(d => detectEvent(d.Vpu_R, d.Vpu_Y, d.Vpu_B) === "Sag").length;
+      const swells = data.filter(d => detectEvent(d.Vpu_R, d.Vpu_Y, d.Vpu_B) === "Swell").length;
+
+      document.getElementById("avgVpu").innerText = "Avg Vpu: " + avgV;
+      document.getElementById("minVpu").innerText = "Min Vpu: " + minV;
+      document.getElementById("maxVpu").innerText = "Max Vpu: " + maxV;
+      document.getElementById("sagSwell").innerText = `Sags: ${sags}, Swells: ${swells}`;
+
+      const timeLabels = data.map(d => d.time.toLocaleTimeString());
+
+      // Vpu Trend
+      Plotly.newPlot('vpuTrend', [
+        {x: timeLabels, y: data.map(d => d.Vpu_R), name: 'Vpu_R', mode: 'lines'},
+        {x: timeLabels, y: data.map(d => d.Vpu_Y), name: 'Vpu_Y', mode: 'lines'},
+        {x: timeLabels, y: data.map(d => d.Vpu_B), name: 'Vpu_B', mode: 'lines'}
+      ], {title: "Vpu Trend", margin: {t:30,l:30,r:10,b:30}, height: 350});
+
+      // Frequency Trend
+      Plotly.newPlot('freqTrend', [
+        {x: timeLabels, y: data.map(d => d.Frequency), name: 'Frequency', mode: 'lines'}
+      ], {title: "Frequency Trend", margin: {t:30,l:30,r:10,b:30}, height: 350});
+
+      // Current Trend
+      Plotly.newPlot('currentTrend', [
+        {x: timeLabels, y: data.map(d => d.R_Current), name: 'R_Current', mode: 'lines'},
+        {x: timeLabels, y: data.map(d => d.Y_Current), name: 'Y_Current', mode: 'lines'},
+        {x: timeLabels, y: data.map(d => d.B_Current), name: 'B_Current', mode: 'lines'}
+      ], {title: "Phase Current Trend", margin: {t:30,l:30,r:10,b:30}, height: 350});
+
+      // Events Table
+      const tbody = document.querySelector("#eventTable tbody");
+      tbody.innerHTML = "";
+      data.forEach(d => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${d.time.toLocaleTimeString()}</td>
+          <td>${d.R_Voltage.toFixed(1)}</td>
+          <td>${d.Y_Voltage.toFixed(1)}</td>
+          <td>${d.B_Voltage.toFixed(1)}</td>
+          <td>${d.Vpu_R.toFixed(2)}</td>
+          <td>${d.Vpu_Y.toFixed(2)}</td>
+          <td>${d.Vpu_B.toFixed(2)}</td>
+          <td>${detectEvent(d.Vpu_R,d.Vpu_Y,d.Vpu_B)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function init() {
+      const data = await fetchTelemetry();
+      renderCharts(data);
+    }
+
+    init();
+
+    async function exportPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({orientation: 'landscape', unit: 'px', format: 'a4'});
+      const content = document.getElementById("reportContent");
+      await html2canvas(content, {scale:2}).then(canvas => {
+        const imgData = canvas.toDataURL("image/png");
+        const imgWidth = doc.internal.pageSize.getWidth();
+        const imgHeight = canvas.height * imgWidth / canvas.width;
+        doc.addImage(imgData, 'PNG', 10, 10, imgWidth-20, imgHeight-20);
+      });
+      doc.save("Voltage_Anomaly_Report.pdf");
+    }
+  </script>
+</body>
+</html>
