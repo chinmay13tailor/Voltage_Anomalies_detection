@@ -8,8 +8,23 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     body { font-family: Arial, sans-serif; margin: 0; background: #EEEEEE; }
-    .date-select { background: #fff; padding: 12px; border-radius: 6px; box-shadow: 0px 1px 4px rgba(0,0,0,0.1); margin: 15px auto; text-align: center; width: 95%; }
+
+    /* LEFT-aligned date selection with inline buttons */
+    .date-select {
+      background: #fff;
+      padding: 12px;
+      border-radius: 6px;
+      box-shadow: 0px 1px 4px rgba(0,0,0,0.1);
+      margin: 15px auto;
+      width: 95%;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      justify-content: flex-start;   /* left align */
+      text-align: left;              /* left align */
+    }
     input, button { margin: 5px; padding: 6px; }
+
     .container { width: 95%; margin: auto; padding: 15px; background: #fff; border-radius: 8px; box-shadow: 0px 2px 6px rgba(0,0,0,0.1); }
     h1 { text-align: center; margin: 10px; display:none; }
 
@@ -29,20 +44,30 @@
     th { background: #ffe600; position: sticky; top: 0; z-index: 1; }
     tr:nth-child(even) { background: #f9f9f9; }
 
+    /* Buttons now inline (not fixed) */
     .export-btn, .table-btn {
-      position: fixed; bottom: 20px; padding: 12px 22px; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; box-shadow: 0px 2px 6px rgba(0,0,0,0.2);
+      padding: 8px 14px;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      box-shadow: 0px 2px 6px rgba(0,0,0,0.2);
     }
-    .export-btn { right: 20px; background: #007BFF; }
+    .export-btn { background: #007BFF; }
     .export-btn:hover { background: #0056b3; }
-    .table-btn { right: 150px; background: #28a745; }
+    .table-btn { background: #28a745; }
     .table-btn:hover { background: #1e7e34; }
   </style>
 </head>
 <body>
-  <!-- Date selection -->
+  <!-- Date selection (LEFT-aligned) with Table + Export buttons moved here -->
   <div class="date-select">
-      Select Date: <input type="date" id="reportDate">
+      <span>Select Date:</span>
+      <input type="date" id="reportDate">
       <button onclick="generateReport()">Generate</button>
+      <button class="table-btn" onclick="toggleRawTable()">Table</button>
+      <button class="export-btn" onclick="exportPDF()">Export PDF</button>
   </div>
 
   <div class="container" id="reportContent">
@@ -81,7 +106,7 @@
       </table>
     </div>
 
-    <!-- New Raw Voltage Table -->
+    <!-- Raw Voltage Table -->
     <div class="table-container" id="rawTableContainer">
       <h3>Raw Voltage Data</h3>
       <table id="rawTable">
@@ -98,8 +123,7 @@
     </div>
   </div>
 
-  <button class="table-btn" onclick="toggleRawTable()">Table</button>
-  <button class="export-btn" onclick="exportPDF()">Export PDF</button>
+  <!-- Bottom buttons removed (now in date bar) -->
 
   <script>
     const DEVICE_ID = "a41ff8c0-ce7c-11ef-826c-29d63551db41";  
