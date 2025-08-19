@@ -6,6 +6,8 @@
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- html2pdf library (handles multipage export) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
     body { font-family: Arial, sans-serif; margin: 0; background: #EEEEEE; }
     .date-select { 
@@ -41,7 +43,7 @@
     .charts { margin-bottom: 25px; }
     .chart-box { margin: 20px 0; }
 
-    .table-container { background: white; padding: 10px; border-radius: 6px; box-shadow: 0px 1px 4px rgba(0,0,0,0.1); margin-bottom: 20px; max-height: 400px; overflow-y: auto; }
+    .table-container { background: white; padding: 10px; border-radius: 6px; box-shadow: 0px 1px 4px rgba(0,0,0,0.1); margin-bottom: 20px; max-height: none; }
     table { border-collapse: collapse; width: 100%; font-size: 12px; }
     th, td { border: 1px solid #ddd; padding: 6px; text-align: center; }
     th { background: #ffe600; position: sticky; top: 0; z-index: 1; }
@@ -179,33 +181,23 @@
     }
 
     async function exportPDF() {
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF({orientation: 'landscape', unit: 'px', format: 'a4'});
       const header = document.getElementById("reportHeader");
-      header.style.display = "block";
+      header.style.display = "block"; // show in PDF export
 
       const content = document.getElementById("reportContent");
-      const canvas = await html2canvas(content, {scale:2});
-      const imgData = canvas.toDataURL("image/png");
 
-      const imgWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
-      const imgHeight = canvas.height * imgWidth / canvas.width;
-      let heightLeft = imgHeight;
-      let position = 10;
+      const opt = {
+        margin:       0.5,
+        filename:     'Voltage_Anomaly_Report.pdf',
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, scrollY: 0 },
+        jsPDF:        { unit: 'in', format: 'a4', orientation: 'landscape' },
+        pagebreak:    { mode: ['css', 'legacy'] }
+      };
 
-      doc.addImage(imgData, 'PNG', 10, position, imgWidth-20, imgHeight-20);
-      heightLeft -= pageHeight;
+      await html2pdf().set(opt).from(content).save();
 
-      while (heightLeft > 0) {
-        doc.addPage();
-        position = - (imgHeight - heightLeft) + 10;
-        doc.addImage(imgData, 'PNG', 10, position, imgWidth-20, imgHeight-20);
-        heightLeft -= pageHeight;
-      }
-
-      doc.save("Voltage_Anomaly_Report.pdf");
-      header.style.display = "none";
+      header.style.display = "none"; // hide again in UI
     }
   </script>
 </body>
