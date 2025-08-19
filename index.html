@@ -4,29 +4,50 @@
   <meta charset="UTF-8">
   <title>Voltage Anomaly Report</title>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
     body { font-family: Arial, sans-serif; margin: 0; background: #EEEEEE; }
-    .date-select { background: #fff; padding: 15px; margin: 15px auto; width: 95%; display: flex; justify-content: space-between; align-items: center; border-radius: 6px; }
+    .date-select { 
+      background: #fff; padding: 15px; border-radius: 6px; 
+      box-shadow: 0px 1px 4px rgba(0,0,0,0.1); margin: 15px auto; 
+      width: 95%; display: flex; align-items: center; justify-content: space-between;
+    }
+    .date-left { display: flex; align-items: center; gap: 10px; }
+    label { font-weight: bold; }
+    input[type="date"] { padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
     .btn { padding: 8px 14px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
-    .btn-generate { background: #007BFF; color: white; }
-    .btn-export { background: #28a745; color: white; }
-    .container { width: 95%; margin: auto; padding: 15px; background: #fff; border-radius: 8px; }
+    .btn-generate { background: #007BFF; color: #fff; }
+    .btn-generate:hover { background: #0056b3; }
+    .btn-export { background: #007BFF; color: #fff; }
+    .btn-export:hover { background: #0056b3; }
+
+    .container { width: 95%; margin: auto; padding: 15px; background: #fff; border-radius: 8px; box-shadow: 0px 2px 6px rgba(0,0,0,0.1); }
     h1 { text-align: center; margin: 10px; display:none; }
+
     .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 20px 0; }
-    .card { background: #fafafa; padding: 15px; text-align: center; border-radius: 6px; font-weight: bold; }
-    .charts { margin: 20px 0; }
-    .chart-box { margin: 20px 0; width: 100%; height: 300px; }
-    .table-container { margin-top: 20px; }
+    .card { background: #fafafa; padding: 15px; text-align: center; border-radius: 6px; box-shadow: 0px 1px 4px rgba(0,0,0,0.1); min-height: 80px; display:flex; align-items:center; justify-content:center; font-weight:bold; }
+    .card:nth-child(1){ border-top: 4px solid #007BFF; }
+    .card:nth-child(2){ border-top: 4px solid #28a745; }
+    .card:nth-child(3){ border-top: 4px solid #dc3545; }
+    .card:nth-child(4){ border-top: 4px solid #ffc107; }
+
+    .charts { margin-bottom: 25px; }
+    .chart-box { margin: 20px 0; width:100%; }
+
+    .table-container { background: white; padding: 10px; border-radius: 6px; box-shadow: 0px 1px 4px rgba(0,0,0,0.1); margin-bottom: 20px; max-height: none; }
     table { border-collapse: collapse; width: 100%; font-size: 12px; }
     th, td { border: 1px solid #ddd; padding: 6px; text-align: center; }
-    th { background: #ffe600; }
+    th { background: #ffe600; position: sticky; top: 0; z-index: 1; }
+    tr:nth-child(even) { background: #f9f9f9; }
   </style>
 </head>
 <body>
+  <!-- Date selection UI -->
   <div class="date-select">
-    <div>
-      <label>Select Date: </label>
+    <div class="date-left">
+      <label for="reportDate">Select Date</label>
       <input type="date" id="reportDate">
       <button class="btn btn-generate" onclick="generateReport()">Generate</button>
     </div>
@@ -37,7 +58,7 @@
     <h1 id="reportHeader">Voltage Anomaly Report</h1>
 
     <div class="summary">
-      <div class="card" id="maxImbalance">Max Imbalance_6 %: --</div>
+      <div class="card" id="maxImbalance">Max Imbalance %: --</div>
       <div class="card" id="totalSags">Total Sag Events: --</div>
       <div class="card" id="totalSwells">Total Swell Events: --</div>
       <div class="card" id="minVoltage">Minimum Voltage: --</div>
@@ -55,7 +76,12 @@
       <table id="eventTable">
         <thead>
           <tr>
-            <th>Start Time</th><th>Type</th><th>Phase</th><th>Value pu</th><th>Imbalance %</th>
+            <th>Start Time</th>
+            <th>Type</th>
+            <th>Phase</th>
+            <th>Value (V)</th>
+            <th>Duration (s)</th>
+            <th>Imbalance %</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -64,97 +90,145 @@
   </div>
 
 <script>
-const DEVICE_ID = "a41ff8c0-ce7c-11ef-826c-29d63551db41";
+const DEVICE_ID = "a41ff8c0-ce7c-11ef-826c-29d63551db41";  
+let jwtToken = ""; 
 const NOMINAL_VOLTAGE = 415;
+const KEYS = ["R_Voltage","Y_Voltage","B_Voltage"];
 
-// ✅ JWT auto fetch from iframe URL (?token=xxxx)
-const urlParams = new URLSearchParams(window.location.search);
-const token = urlParams.get("token");
-
-async function fetchTelemetry(from, to) {
-  const url = `https://thingsboard.cloud/api/plugins/telemetry/DEVICE/${DEVICE_ID}/values/timeseries?keys=Va,Vb,Vc&startTs=${from}&endTs=${to}&interval=60000&limit=5000&agg=AVG`;
-  const response = await fetch(url, {
-    headers: { "X-Authorization": "Bearer " + token }
-  });
-  return response.json();
+// ✅ Get JWT token from ThingsBoard iframe (passed in ?token=...)
+function getTokenFromUrl() {
+  const urlParams = new URLSearchParams(window.location.search);
+  return urlParams.get("token") || "";
 }
+jwtToken = getTokenFromUrl();
 
-function analyzeAndDisplay(raw) {
+// ✅ Fetch telemetry from ThingsBoard API
+async function fetchTelemetry(from, to) {
+  const url = `https://thingsboard.cloud/api/plugins/telemetry/DEVICE/${DEVICE_ID}/values/timeseries?keys=${KEYS.join(",")}&startTs=${from}&endTs=${to}&interval=60000&limit=10000&agg=AVG`;
+
+  const res = await fetch(url, {
+    headers: { "X-Authorization": "Bearer " + jwtToken }
+  });
+  if(!res.ok) {
+    console.error("Telemetry fetch failed", await res.text());
+    return [];
+  }
+  const json = await res.json();
+  
   let data = [];
-  const timestamps = raw.Va?.map(r => r.ts) || [];
-  timestamps.forEach((ts, i) => {
+  const tsArray = json[KEYS[0]]?.map(d => parseInt(d.ts)) || [];
+  tsArray.forEach((ts, idx) => {
     data.push({
       ts,
-      Va: parseFloat(raw.Va?.[i]?.value || 0),
-      Vb: parseFloat(raw.Vb?.[i]?.value || 0),
-      Vc: parseFloat(raw.Vc?.[i]?.value || 0)
+      R_Voltage: parseFloat(json.R_Voltage[idx]?.value || 0),
+      Y_Voltage: parseFloat(json.Y_Voltage[idx]?.value || 0),
+      B_Voltage: parseFloat(json.B_Voltage[idx]?.value || 0)
     });
   });
+  return data;
+}
 
-  let sagEvents=[], swellEvents=[], imbalanceArr=[];
+// ✅ Analyze sag/swell/imbalance
+function analyzeData(data) {
+  let sagEvents = [], swellEvents = [], imbalanceArr = [];
   let minVoltage = {val: Infinity, ts: null, phase: ""};
 
-  data.forEach(d=>{
-    let VpuA=d.Va/NOMINAL_VOLTAGE, VpuB=d.Vb/NOMINAL_VOLTAGE, VpuC=d.Vc/NOMINAL_VOLTAGE;
-    let avg=(d.Va+d.Vb+d.Vc)/3;
-    let imbalance=((Math.max(d.Va,d.Vb,d.Vc)-Math.min(d.Va,d.Vb,d.Vc))/avg)*100;
+  data.forEach(d => {
+    let Rpu = d.R_Voltage/NOMINAL_VOLTAGE;
+    let Ypu = d.Y_Voltage/NOMINAL_VOLTAGE;
+    let Bpu = d.B_Voltage/NOMINAL_VOLTAGE;
+    let avg = (d.R_Voltage+d.Y_Voltage+d.B_Voltage)/3;
+    let imbalance = ((Math.max(d.R_Voltage,d.Y_Voltage,d.B_Voltage)-Math.min(d.R_Voltage,d.Y_Voltage,d.B_Voltage))/avg)*100;
     imbalanceArr.push({ts:d.ts,val:imbalance});
 
-    [["Va",d.Va],["Vb",d.Vb],["Vc",d.Vc]].forEach(([ph,val])=>{
+    [["R",d.R_Voltage],["Y",d.Y_Voltage],["B",d.B_Voltage]].forEach(([ph,val])=>{
       if(val<minVoltage.val){minVoltage={val,ts:d.ts,phase:ph}}
     });
-    [["Va",VpuA],["Vb",VpuB],["Vc",VpuC]].forEach(([ph,vpu])=>{
-      if(vpu<0.9) sagEvents.push({ts:d.ts,phase:ph,vpu,imbalance});
-      if(vpu>1.1) swellEvents.push({ts:d.ts,phase:ph,vpu,imbalance});
+
+    [["R",Rpu],["Y",Ypu],["B",Bpu]].forEach(([ph,vpu])=>{
+      if(vpu<0.9){ sagEvents.push({ts:d.ts,phase:ph,val:vpu*NOMINAL_VOLTAGE,imbalance}); }
+      if(vpu>1.1){ swellEvents.push({ts:d.ts,phase:ph,val:vpu*NOMINAL_VOLTAGE,imbalance}); }
     });
   });
+  return {sagEvents, swellEvents, imbalanceArr, minVoltage};
+}
 
-  document.getElementById("totalSags").innerText="Total Sag Events: "+sagEvents.length;
-  document.getElementById("totalSwells").innerText="Total Swell Events: "+swellEvents.length;
-  document.getElementById("maxImbalance").innerText="Max Imbalance %: "+(Math.max(...imbalanceArr.map(x=>x.val)).toFixed(1));
-  document.getElementById("minVoltage").innerText="Minimum Voltage: "+minVoltage.val.toFixed(0)+" V ("+minVoltage.phase+")";
+// ✅ Generate report
+async function generateReport() {
+  let selectedDate = document.getElementById("reportDate").value;
+  if(!selectedDate){alert("Select a date");return;}
 
-  Plotly.newPlot("voltageTrend",[
-    {x:data.map(d=>new Date(d.ts)),y:data.map(d=>d.Va/NOMINAL_VOLTAGE),name:"Va (pu)",mode:"lines"},
-    {x:data.map(d=>new Date(d.ts)),y:data.map(d=>d.Vb/NOMINAL_VOLTAGE),name:"Vb (pu)",mode:"lines"},
-    {x:data.map(d=>new Date(d.ts)),y:data.map(d=>d.Vc/NOMINAL_VOLTAGE),name:"Vc (pu)",mode:"lines"}
-  ],{title:"Three-Phase Voltage Trend",legend:{orientation:"h",y:-0.3}});
+  let from = new Date(selectedDate+"T00:00:00").getTime();
+  let to   = new Date(selectedDate+"T23:59:59").getTime();
 
-  Plotly.newPlot("imbalanceTrend",[
-    {x:imbalanceArr.map(d=>new Date(d.ts)),y:imbalanceArr.map(d=>d.val),name:"Imbalance %",mode:"lines"}
-  ],{title:"Imbalance % Trend",legend:{orientation:"h",y:-0.3}});
+  let data = await fetchTelemetry(from,to);
+  if(!data.length){alert("No data fetched");return;}
+  let {sagEvents, swellEvents, imbalanceArr, minVoltage} = analyzeData(data);
 
-  // Fill table
-  const tbody=document.querySelector("#eventTable tbody");
-  tbody.innerHTML="";
-  sagEvents.concat(swellEvents).forEach(ev=>{
-    let tr=document.createElement("tr");
-    tr.innerHTML=`<td>${new Date(ev.ts).toLocaleString()}</td><td>${ev.vpu<0.9?"Sag":"Swell"}</td><td>${ev.phase}</td><td>${ev.vpu.toFixed(2)}</td><td>${ev.imbalance.toFixed(1)}</td>`;
+  document.getElementById("totalSags").innerText = "Total Sag Events: "+sagEvents.length;
+  document.getElementById("totalSwells").innerText = "Total Swell Events: "+swellEvents.length;
+  document.getElementById("maxImbalance").innerText = "Max Imbalance %: "+(Math.max(...imbalanceArr.map(x=>x.val)).toFixed(1));
+  document.getElementById("minVoltage").innerText = "Minimum Voltage: "+minVoltage.val.toFixed(0)+" V at "+new Date(minVoltage.ts).toLocaleTimeString()+" "+minVoltage.phase;
+
+  Plotly.newPlot("voltageTrend", [
+    {x:data.map(d=>new Date(d.ts)), y:data.map(d=>d.R_Voltage/NOMINAL_VOLTAGE), name:"R_Voltage (pu)", mode:"lines"},
+    {x:data.map(d=>new Date(d.ts)), y:data.map(d=>d.Y_Voltage/NOMINAL_VOLTAGE), name:"Y_Voltage (pu)", mode:"lines"},
+    {x:data.map(d=>new Date(d.ts)), y:data.map(d=>d.B_Voltage/NOMINAL_VOLTAGE), name:"B_Voltage (pu)", mode:"lines"},
+  ], {title:"Three-Phase Voltage Trend (pu)", legend:{orientation:"h", y:-0.3}});
+
+  Plotly.newPlot("imbalanceTrend", [
+    {x:imbalanceArr.map(d=>new Date(d.ts)), y:imbalanceArr.map(d=>d.val), name:"Imbalance %", mode:"lines"}
+  ], {title:"Imbalance % Trend", legend:{orientation:"h", y:-0.3}});
+
+  let hours = {};
+  sagEvents.forEach(e=>{let h=new Date(e.ts).getHours();hours[h]=hours[h]||{sag:0,swell:0};hours[h].sag++;});
+  swellEvents.forEach(e=>{let h=new Date(e.ts).getHours();hours[h]=hours[h]||{sag:0,swell:0};hours[h].swell++;});
+
+  Plotly.newPlot("sagSwellCounts", [
+    {x:Object.keys(hours), y:Object.values(hours).map(h=>h.sag), name:"Sag", type:"bar"},
+    {x:Object.keys(hours), y:Object.values(hours).map(h=>h.swell), name:"Swell", type:"bar"}
+  ], {barmode:"group", title:"Sag/Swell Counts by Hour", legend:{orientation:"h", y:-0.3}});
+
+  Plotly.newPlot("boxPlot", [
+    {y:data.map(d=>d.R_Voltage/NOMINAL_VOLTAGE), name:"R_Voltage", type:"box"},
+    {y:data.map(d=>d.Y_Voltage/NOMINAL_VOLTAGE), name:"Y_Voltage", type:"box"},
+    {y:data.map(d=>d.B_Voltage/NOMINAL_VOLTAGE), name:"B_Voltage", type:"box"}
+  ], {title:"Voltage (pu) Distribution", legend:{orientation:"h", y:-0.3}});
+
+  // Table rows
+  let tbody = document.querySelector("#eventTable tbody");
+  tbody.innerHTML = "";
+  [...sagEvents,...swellEvents].forEach(e=>{
+    let tr = document.createElement("tr");
+    tr.innerHTML = `<td>${new Date(e.ts).toLocaleString()}</td>
+                    <td>${e.val<NOMINAL_VOLTAGE?"Sag":"Swell"}</td>
+                    <td>${e.phase}</td>
+                    <td>${e.val.toFixed(1)}</td>
+                    <td>60</td>
+                    <td>${e.imbalance.toFixed(1)}</td>`;
     tbody.appendChild(tr);
   });
 }
 
-async function generateReport() {
-  let d=document.getElementById("reportDate").value;
-  if(!d){alert("Select date");return;}
-  let from=new Date(d+"T00:00:00").getTime();
-  let to=new Date(d+"T23:59:59").getTime();
-  let raw=await fetchTelemetry(from,to);
-  analyzeAndDisplay(raw);
-}
-
+// ✅ Export multipage A4 PDF
 async function exportPDF() {
-  const header=document.getElementById("reportHeader");
-  header.style.display="block";
-  await html2pdf().set({
-    margin:[0.3,0.3,0.3,0.3],
-    filename:'Voltage_Anomaly_Report.pdf',
-    image:{type:'jpeg',quality:0.98},
-    html2canvas:{scale:2,scrollY:0},
-    jsPDF:{unit:'in',format:'a4',orientation:'portrait'},
-    pagebreak:{mode:['css','legacy']}
-  }).from(document.getElementById("reportContent")).save();
-  header.style.display="none";
+  const header = document.getElementById("reportHeader");
+  header.style.display = "block"; 
+
+  const content = document.getElementById("reportContent");
+
+  const opt = {
+    margin: [0.3,0.3,0.3,0.3],
+    filename: 'Voltage_Anomaly_Report.pdf',
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, scrollY: 0 },
+    jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['css','legacy'] }
+  };
+
+  await html2pdf().set(opt).from(content).save();
+
+  header.style.display = "none"; 
 }
 </script>
 </body>
