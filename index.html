@@ -221,7 +221,7 @@
       }
     }
 
-     async function exportPDF() {
+   async function exportPDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'landscape', unit: 'px', format: 'a4' });
 
@@ -229,38 +229,55 @@
     header.style.display = "block";
 
     const content = document.getElementById("reportContent");
+    const sagEl   = document.getElementById("sagSwellCounts");
 
-    // Render at higher scale for crisp charts
-    const canvas = await html2canvas(content, { scale: 2 });
-
-    const imgData = canvas.toDataURL("image/png");
-
-    const pageWidth  = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
+    // PDF layout
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
     const margin = 20;
+    const imgW = pageW - margin * 2;
 
-    // Fit image to page width, preserve aspect
-    const imgWidth  = pageWidth - margin * 2;
-    const imgHeight = canvas.height * imgWidth / canvas.width;
+    // Compute if sagEl would be split across page 1, and if so push it down.
+    // Map CSS px -> PDF units without rendering: scale = imgW / content.clientWidth
+    const cssToPdf = imgW / content.clientWidth;
+    const usableCssHeightPage1 = (pageH - margin * 2) / cssToPdf;
 
-    // Add first page
-    let heightLeft = imgHeight;
-    let positionY  = margin;
+    let addedMarginPx = 0;
+    if (sagEl) {
+      const sagTopCss = sagEl.offsetTop - content.offsetTop;
+      const sagBottomCss = sagTopCss + sagEl.clientHeight;
 
-    doc.addImage(imgData, 'PNG', margin, positionY, imgWidth, imgHeight);
-    heightLeft -= (pageHeight - margin * 2);
+      const wouldSplit = sagTopCss < usableCssHeightPage1 && sagBottomCss > usableCssHeightPage1;
+      if (wouldSplit) {
+        // Push the chart so it begins on page 2 (add a small buffer)
+        addedMarginPx = Math.ceil(usableCssHeightPage1 - sagTopCss + 16);
+        const current = parseFloat(getComputedStyle(sagEl).marginTop) || 0;
+        sagEl.style.marginTop = (current + addedMarginPx) + "px";
+      }
+    }
 
-    // Add extra pages for remaining height
+    // Render and paginate
+    const canvas = await html2canvas(content, { scale: 2 });
+    const imgData = canvas.toDataURL("image/png");
+    const imgH = canvas.height * imgW / canvas.width;
+
+    let heightLeft = imgH;
+
+    doc.addImage(imgData, 'PNG', margin, margin, imgW, imgH);
+    heightLeft -= (pageH - margin * 2);
+
     while (heightLeft > 0) {
       doc.addPage();
-      // Shift image up by the amount already "printed"
-      positionY = margin - (imgHeight - heightLeft);
-      doc.addImage(imgData, 'PNG', margin, positionY, imgWidth, imgHeight);
-      heightLeft -= (pageHeight - margin * 2);
+      const positionY = margin - (imgH - heightLeft);
+      doc.addImage(imgData, 'PNG', margin, positionY, imgW, imgH);
+      heightLeft -= (pageH - margin * 2);
     }
 
     doc.save("Voltage_Anomaly_Report.pdf");
     header.style.display = "none";
+
+    // Revert temporary margin change
+    if (addedMarginPx) sagEl.style.marginTop = "";
   }
   </script>
 </body>
