@@ -221,22 +221,47 @@
       }
     }
 
-    async function exportPDF() {
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF({orientation: 'landscape', unit: 'px', format: 'a4'});
-      const header = document.getElementById("reportHeader");
-      header.style.display = "block";
+     async function exportPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'px', format: 'a4' });
 
-      const content = document.getElementById("reportContent");
-      await html2canvas(content, {scale:2}).then(canvas => {
-        const imgData = canvas.toDataURL("image/png");
-        const imgWidth = doc.internal.pageSize.getWidth();
-        const imgHeight = canvas.height * imgWidth / canvas.width;
-        doc.addImage(imgData, 'PNG', 10, 10, imgWidth-20, imgHeight-20);
-      });
-      doc.save("Voltage_Anomaly_Report.pdf");
-      header.style.display = "none";
+    const header = document.getElementById("reportHeader");
+    header.style.display = "block";
+
+    const content = document.getElementById("reportContent");
+
+    // Render at higher scale for crisp charts
+    const canvas = await html2canvas(content, { scale: 2 });
+
+    const imgData = canvas.toDataURL("image/png");
+
+    const pageWidth  = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 20;
+
+    // Fit image to page width, preserve aspect
+    const imgWidth  = pageWidth - margin * 2;
+    const imgHeight = canvas.height * imgWidth / canvas.width;
+
+    // Add first page
+    let heightLeft = imgHeight;
+    let positionY  = margin;
+
+    doc.addImage(imgData, 'PNG', margin, positionY, imgWidth, imgHeight);
+    heightLeft -= (pageHeight - margin * 2);
+
+    // Add extra pages for remaining height
+    while (heightLeft > 0) {
+      doc.addPage();
+      // Shift image up by the amount already "printed"
+      positionY = margin - (imgHeight - heightLeft);
+      doc.addImage(imgData, 'PNG', margin, positionY, imgWidth, imgHeight);
+      heightLeft -= (pageHeight - margin * 2);
     }
+
+    doc.save("Voltage_Anomaly_Report.pdf");
+    header.style.display = "none";
+  }
   </script>
 </body>
 </html>
