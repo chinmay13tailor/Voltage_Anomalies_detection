@@ -61,7 +61,7 @@
   </style>
 </head>
 <body>
-  <!-- Date selection (LEFT-aligned) with Table + Export buttons moved here -->
+  <!-- Date selection (LEFT-aligned) with Table + Export buttons -->
   <div class="date-select">
       <span>Select Date:</span>
       <input type="date" id="reportDate">
@@ -87,26 +87,7 @@
       <div id="boxPlot" class="chart-box"></div>
     </div>
 
-    <!-- Events Table -->
-    <div class="table-container" id="eventTableContainer">
-      <h3>Events Table</h3>
-      <table id="eventTable">
-        <thead>
-          <tr>
-            <th>Start Time</th>
-            <th>End Time</th>
-            <th>Type</th>
-            <th>Phase</th>
-            <th>Min/Max pu</th>
-            <th>Duration (s)</th>
-            <th>Imbalance %</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-
-    <!-- Raw Voltage Table -->
+    <!-- Raw Voltage Table ONLY -->
     <div class="table-container" id="rawTableContainer">
       <h3>Raw Voltage Data</h3>
       <table id="rawTable">
@@ -122,8 +103,6 @@
       </table>
     </div>
   </div>
-
-  <!-- Bottom buttons removed (now in date bar) -->
 
   <script>
     const DEVICE_ID = "a41ff8c0-ce7c-11ef-826c-29d63551db41";  
