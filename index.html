@@ -27,19 +27,52 @@
     .container { width: 95%; margin: auto; padding: 15px; background: #fff; border-radius: 8px; box-shadow: 0px 2px 6px rgba(0,0,0,0.1); }
     h1 { text-align: center; margin: 10px; display:none; }
 
-    /* Header & Footer styles */
-    .report-header, .report-footer {
-      border: 1px solid #ddd;
-      padding: 10px;
-      margin-bottom: 15px;
+    /* HEADER */
+    .report-header {
+      border: 1px solid #000;
       border-radius: 6px;
-      background: #fafafa;
-      font-size: 13px;
+      padding: 12px 20px;
+      margin-bottom: 15px;
+      background: #fff;
     }
-    .report-header h2 { margin: 0; text-align: center; }
-    .report-header .meta { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; }
-    .report-footer { margin-top: 20px; }
-    .report-footer div { margin: 6px 0; }
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .header-top img {
+      height: 50px;
+    }
+    .header-center {
+      text-align: center;
+      flex: 1;
+    }
+    .header-center h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: bold;
+    }
+    .header-center h3 {
+      margin: 4px 0 0;
+      font-size: 14px;
+      font-weight: normal;
+    }
+    .header-bottom {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      margin-top: 6px;
+    }
+
+    /* FOOTER */
+    .report-footer {
+      margin-top: 20px;
+      border-top: 1px solid #ccc;
+      padding-top: 10px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+    }
 
     .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 20px 0; }
     .card { background: #fafafa; padding: 15px; text-align: center; border-radius: 6px; box-shadow: 0px 1px 4px rgba(0,0,0,0.1); min-height: 80px; display:flex; align-items:center; justify-content:center; font-weight:bold; }
@@ -86,16 +119,25 @@
 
     <!-- HEADER -->
     <div class="report-header" id="customHeader" style="display:none;">
-      <h2>Pima Controls Pvt. Ltd</h2>
-      <h3>Voltage Anomaly Report</h3>
-      <div class="meta">
+      <div class="header-top">
+        <!-- Platform logo (left) -->
+        <img src="plantwiz-logo.png" alt="Plantwiz Logo">
+        <!-- Center text -->
+        <div class="header-center">
+          <h2>Pima Controls Pvt. Ltd</h2>
+          <h3>Voltage Anomaly Report</h3>
+        </div>
+        <!-- Company logo (right) -->
+        <img src="pima-logo.png" alt="Pima Logo">
+      </div>
+      <div class="header-bottom">
         <span id="reportDateText">Date: --</span>
         <span id="generatedDateText">Generated: --</span>
       </div>
     </div>
 
     <div class="summary">
-      <div class="card" id="maxImbalance">Max Imbalance_1 %: --</div>
+      <div class="card" id="maxImbalance">Max Imbalance_2 %: --</div>
       <div class="card" id="totalSags">Total Sag Events: --</div>
       <div class="card" id="totalSwells">Total Swell Events: --</div>
       <div class="card" id="minVoltage">Minimum Voltage: --</div>
@@ -203,7 +245,7 @@
       document.getElementById("customHeader").style.display = "block";
       document.getElementById("customFooter").style.display = "block";
       document.getElementById("reportDateText").innerText = "Date: " + selectedDate;
-      document.getElementById("generatedDateText").innerText = "Generated: " + new Date().toLocaleString();
+      document.getElementById("generatedDateText").innerText = "Report Generated ON: " + new Date().toLocaleString();
 
       Plotly.newPlot("voltageTrend", [
         {x:data.map(d=>new Date(d.ts)), y:data.map(d=>d.R_Voltage/NOMINAL_VOLTAGE), name:"R Phase", mode:"lines"},
@@ -248,42 +290,22 @@
     async function exportPDF() {
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF({ orientation: 'landscape', unit: 'px', format: 'a4' });
-      const header = document.getElementById("reportHeader");
-      header.style.display = "block";
       const content = document.getElementById("reportContent");
-      const sagEl   = document.getElementById("sagSwellCounts");
-      const pageW = doc.internal.pageSize.getWidth();
-      const pageH = doc.internal.pageSize.getHeight();
-      const margin = 20;
-      const imgW = pageW - margin * 2;
-      const cssToPdf = imgW / content.clientWidth;
-      const usableCssHeightPage1 = (pageH - margin * 2) / cssToPdf;
-      let addedMarginPx = 0;
-      if (sagEl) {
-        const sagTopCss = sagEl.offsetTop - content.offsetTop;
-        const sagBottomCss = sagTopCss + sagEl.clientHeight;
-        const wouldSplit = sagTopCss < usableCssHeightPage1 && sagBottomCss > usableCssHeightPage1;
-        if (wouldSplit) {
-          addedMarginPx = Math.ceil(usableCssHeightPage1 - sagTopCss + 16);
-          const current = parseFloat(getComputedStyle(sagEl).marginTop) || 0;
-          sagEl.style.marginTop = (current + addedMarginPx) + "px";
-        }
-      }
       const canvas = await html2canvas(content, { scale: 2 });
       const imgData = canvas.toDataURL("image/png");
+      const imgW = doc.internal.pageSize.getWidth() - 20;
       const imgH = canvas.height * imgW / canvas.width;
       let heightLeft = imgH;
-      doc.addImage(imgData, 'PNG', margin, margin, imgW, imgH);
-      heightLeft -= (pageH - margin * 2);
+      let position = 10;
+      doc.addImage(imgData, 'PNG', 10, position, imgW, imgH);
+      heightLeft -= doc.internal.pageSize.getHeight();
       while (heightLeft > 0) {
+        position = heightLeft - imgH;
         doc.addPage();
-        const positionY = margin - (imgH - heightLeft);
-        doc.addImage(imgData, 'PNG', margin, positionY, imgW, imgH);
-        heightLeft -= (pageH - margin * 2);
+        doc.addImage(imgData, 'PNG', 10, position, imgW, imgH);
+        heightLeft -= doc.internal.pageSize.getHeight();
       }
       doc.save("Voltage_Anomaly_Report.pdf");
-      header.style.display = "none";
-      if (addedMarginPx) sagEl.style.marginTop = "";
     }
   </script>
 </body>
