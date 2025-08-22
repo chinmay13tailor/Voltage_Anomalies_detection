@@ -9,7 +9,6 @@
   <style>
     body { font-family: Arial, sans-serif; margin: 0; background: #EEEEEE; }
 
-    /* LEFT-aligned date selection with inline buttons */
     .date-select {
       background: #fff;
       padding: 12px;
@@ -20,13 +19,27 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      justify-content: flex-start;   /* left align */
-      text-align: left;              /* left align */
+      justify-content: flex-start;
+      text-align: left;
     }
     input, button { margin: 5px; padding: 6px; }
 
     .container { width: 95%; margin: auto; padding: 15px; background: #fff; border-radius: 8px; box-shadow: 0px 2px 6px rgba(0,0,0,0.1); }
     h1 { text-align: center; margin: 10px; display:none; }
+
+    /* Header & Footer styles */
+    .report-header, .report-footer {
+      border: 1px solid #ddd;
+      padding: 10px;
+      margin-bottom: 15px;
+      border-radius: 6px;
+      background: #fafafa;
+      font-size: 13px;
+    }
+    .report-header h2 { margin: 0; text-align: center; }
+    .report-header .meta { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; }
+    .report-footer { margin-top: 20px; }
+    .report-footer div { margin: 6px 0; }
 
     .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 20px 0; }
     .card { background: #fafafa; padding: 15px; text-align: center; border-radius: 6px; box-shadow: 0px 1px 4px rgba(0,0,0,0.1); min-height: 80px; display:flex; align-items:center; justify-content:center; font-weight:bold; }
@@ -44,7 +57,6 @@
     th { background: #ffe600; position: sticky; top: 0; z-index: 1; }
     tr:nth-child(even) { background: #f9f9f9; }
 
-    /* Buttons now inline (not fixed) */
     .export-btn, .table-btn {
       padding: 8px 14px;
       color: white;
@@ -61,7 +73,6 @@
   </style>
 </head>
 <body>
-  <!-- Date selection (LEFT-aligned) with Table + Export buttons -->
   <div class="date-select">
       <span>Select Date:</span>
       <input type="date" id="reportDate">
@@ -73,8 +84,18 @@
   <div class="container" id="reportContent">
     <h1 id="reportHeader">Voltage Anomaly Report</h1>
 
+    <!-- HEADER -->
+    <div class="report-header" id="customHeader" style="display:none;">
+      <h2>Pima Controls Pvt. Ltd</h2>
+      <h3>Voltage Anomaly Report</h3>
+      <div class="meta">
+        <span id="reportDateText">Date: --</span>
+        <span id="generatedDateText">Generated: --</span>
+      </div>
+    </div>
+
     <div class="summary">
-      <div class="card" id="maxImbalance">Max Imbalance %: --</div>
+      <div class="card" id="maxImbalance">Max Imbalance_1 %: --</div>
       <div class="card" id="totalSags">Total Sag Events: --</div>
       <div class="card" id="totalSwells">Total Swell Events: --</div>
       <div class="card" id="minVoltage">Minimum Voltage: --</div>
@@ -87,7 +108,6 @@
       <div id="boxPlot" class="chart-box"></div>
     </div>
 
-    <!-- Raw Voltage Table ONLY -->
     <div class="table-container" id="rawTableContainer">
       <h3>Raw Voltage Data</h3>
       <table id="rawTable">
@@ -102,6 +122,13 @@
         <tbody></tbody>
       </table>
     </div>
+
+    <!-- FOOTER -->
+    <div class="report-footer" id="customFooter" style="display:none;">
+      <div>Remarks: ____________________________</div>
+      <div>Checked By: ____________________________</div>
+      <div>Confirmed By: __________________________</div>
+    </div>
   </div>
 
   <script>
@@ -113,7 +140,7 @@
     const qs = new URLSearchParams(location.search);
     const JWT = qs.get("token") || "";
 
-    let lastData = []; // store for reuse
+    let lastData = [];
 
     async function fetchTelemetry(from, to) {
       const url = `${API_BASE_URL}/plugins/telemetry/DEVICE/${DEVICE_ID}/values/timeseries` +
@@ -122,7 +149,6 @@
       const res = await fetch(url, { headers });
       if (!res.ok) throw new Error("Fetch failed " + res.statusText);
       const json = await res.json();
-
       const map = new Map();
       Object.entries(json).forEach(([key, arr])=>{
         (arr||[]).forEach(p=>{
@@ -138,7 +164,6 @@
     function analyzeData(data) {
       let sagEvents = [], swellEvents = [], imbalanceArr = [];
       let minVoltage = {val: Infinity, ts: null, phase: ""};
-
       data.forEach(d => {
         let VpuR = d.R_Voltage/NOMINAL_VOLTAGE;
         let VpuY = d.Y_Voltage/NOMINAL_VOLTAGE;
@@ -146,11 +171,9 @@
         let avg = (d.R_Voltage+d.Y_Voltage+d.B_Voltage)/3;
         let imbalance = ((Math.max(d.R_Voltage,d.Y_Voltage,d.B_Voltage)-Math.min(d.R_Voltage,d.Y_Voltage,d.B_Voltage))/avg)*100;
         imbalanceArr.push({ts:d.ts,val:imbalance});
-
         [["R_Voltage",d.R_Voltage],["Y_Voltage",d.Y_Voltage],["B_Voltage",d.B_Voltage]].forEach(([ph,val])=>{
           if(val<minVoltage.val){minVoltage={val,ts:d.ts,phase:ph}}
         });
-
         [["R_Voltage",VpuR],["Y_Voltage",VpuY],["B_Voltage",VpuB]].forEach(([ph,vpu])=>{
           if(vpu<0.9){ sagEvents.push({ts:d.ts,phase:ph,vpu,imbalance}); }
           if(vpu>1.1){ swellEvents.push({ts:d.ts,phase:ph,vpu,imbalance}); }
@@ -167,7 +190,7 @@
       let to   = selectedDate + "T23:59:59";
 
       let data = await fetchTelemetry(from,to);
-      lastData = data; // save for raw table
+      lastData = data;
 
       let {sagEvents, swellEvents, imbalanceArr, minVoltage} = analyzeData(data);
 
@@ -176,25 +199,27 @@
       document.getElementById("maxImbalance").innerText = "Max Imbalance %: "+(Math.max(...imbalanceArr.map(x=>x.val)).toFixed(1));
       document.getElementById("minVoltage").innerText = "Minimum Voltage: "+minVoltage.val.toFixed(0)+" V at "+new Date(minVoltage.ts).toLocaleTimeString()+" "+minVoltage.phase;
 
+      // Fill header info
+      document.getElementById("customHeader").style.display = "block";
+      document.getElementById("customFooter").style.display = "block";
+      document.getElementById("reportDateText").innerText = "Date: " + selectedDate;
+      document.getElementById("generatedDateText").innerText = "Generated: " + new Date().toLocaleString();
+
       Plotly.newPlot("voltageTrend", [
         {x:data.map(d=>new Date(d.ts)), y:data.map(d=>d.R_Voltage/NOMINAL_VOLTAGE), name:"R Phase", mode:"lines"},
         {x:data.map(d=>new Date(d.ts)), y:data.map(d=>d.Y_Voltage/NOMINAL_VOLTAGE), name:"Y Phase", mode:"lines"},
         {x:data.map(d=>new Date(d.ts)), y:data.map(d=>d.B_Voltage/NOMINAL_VOLTAGE), name:"B Phase", mode:"lines"},
       ], {title:"Three-Phase Voltage Trend (pu)", legend:{orientation:"h", y:-0.3}});
-
       Plotly.newPlot("imbalanceTrend", [
         {x:imbalanceArr.map(d=>new Date(d.ts)), y:imbalanceArr.map(d=>d.val), name:"Imbalance %", mode:"lines"}
       ], {title:"Imbalance % Trend", legend:{orientation:"h", y:-0.3}});
-
       let hours = {};
       sagEvents.forEach(e=>{let h=new Date(e.ts).getHours();hours[h]=hours[h]||{sag:0,swell:0};hours[h].sag++;});
       swellEvents.forEach(e=>{let h=new Date(e.ts).getHours();hours[h]=hours[h]||{sag:0,swell:0};hours[h].swell++;});
-
       Plotly.newPlot("sagSwellCounts", [
         {x:Object.keys(hours), y:Object.values(hours).map(h=>h.sag), name:"Sag", type:"bar"},
         {x:Object.keys(hours), y:Object.values(hours).map(h=>h.swell), name:"Swell", type:"bar"}
       ], {barmode:"group", title:"Sag/Swell Counts by Hour", legend:{orientation:"h", y:-0.3}});
-
       Plotly.newPlot("boxPlot", [
         {y:data.map(d=>d.R_Voltage/NOMINAL_VOLTAGE), name:"R Phase", type:"box"},
         {y:data.map(d=>d.Y_Voltage/NOMINAL_VOLTAGE), name:"Y Phase", type:"box"},
@@ -205,7 +230,6 @@
     function toggleRawTable() {
       const cont = document.getElementById("rawTableContainer");
       cont.style.display = cont.style.display === "none" ? "block" : "none";
-
       if(cont.style.display === "block" && lastData.length) {
         let tbody = document.querySelector("#rawTable tbody");
         tbody.innerHTML = "";
@@ -221,64 +245,46 @@
       }
     }
 
-   async function exportPDF() {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'px', format: 'a4' });
-
-    const header = document.getElementById("reportHeader");
-    header.style.display = "block";
-
-    const content = document.getElementById("reportContent");
-    const sagEl   = document.getElementById("sagSwellCounts");
-
-    // PDF layout
-    const pageW = doc.internal.pageSize.getWidth();
-    const pageH = doc.internal.pageSize.getHeight();
-    const margin = 20;
-    const imgW = pageW - margin * 2;
-
-    // Compute if sagEl would be split across page 1, and if so push it down.
-    // Map CSS px -> PDF units without rendering: scale = imgW / content.clientWidth
-    const cssToPdf = imgW / content.clientWidth;
-    const usableCssHeightPage1 = (pageH - margin * 2) / cssToPdf;
-
-    let addedMarginPx = 0;
-    if (sagEl) {
-      const sagTopCss = sagEl.offsetTop - content.offsetTop;
-      const sagBottomCss = sagTopCss + sagEl.clientHeight;
-
-      const wouldSplit = sagTopCss < usableCssHeightPage1 && sagBottomCss > usableCssHeightPage1;
-      if (wouldSplit) {
-        // Push the chart so it begins on page 2 (add a small buffer)
-        addedMarginPx = Math.ceil(usableCssHeightPage1 - sagTopCss + 16);
-        const current = parseFloat(getComputedStyle(sagEl).marginTop) || 0;
-        sagEl.style.marginTop = (current + addedMarginPx) + "px";
+    async function exportPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'px', format: 'a4' });
+      const header = document.getElementById("reportHeader");
+      header.style.display = "block";
+      const content = document.getElementById("reportContent");
+      const sagEl   = document.getElementById("sagSwellCounts");
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      const margin = 20;
+      const imgW = pageW - margin * 2;
+      const cssToPdf = imgW / content.clientWidth;
+      const usableCssHeightPage1 = (pageH - margin * 2) / cssToPdf;
+      let addedMarginPx = 0;
+      if (sagEl) {
+        const sagTopCss = sagEl.offsetTop - content.offsetTop;
+        const sagBottomCss = sagTopCss + sagEl.clientHeight;
+        const wouldSplit = sagTopCss < usableCssHeightPage1 && sagBottomCss > usableCssHeightPage1;
+        if (wouldSplit) {
+          addedMarginPx = Math.ceil(usableCssHeightPage1 - sagTopCss + 16);
+          const current = parseFloat(getComputedStyle(sagEl).marginTop) || 0;
+          sagEl.style.marginTop = (current + addedMarginPx) + "px";
+        }
       }
-    }
-
-    // Render and paginate
-    const canvas = await html2canvas(content, { scale: 2 });
-    const imgData = canvas.toDataURL("image/png");
-    const imgH = canvas.height * imgW / canvas.width;
-
-    let heightLeft = imgH;
-
-    doc.addImage(imgData, 'PNG', margin, margin, imgW, imgH);
-    heightLeft -= (pageH - margin * 2);
-
-    while (heightLeft > 0) {
-      doc.addPage();
-      const positionY = margin - (imgH - heightLeft);
-      doc.addImage(imgData, 'PNG', margin, positionY, imgW, imgH);
+      const canvas = await html2canvas(content, { scale: 2 });
+      const imgData = canvas.toDataURL("image/png");
+      const imgH = canvas.height * imgW / canvas.width;
+      let heightLeft = imgH;
+      doc.addImage(imgData, 'PNG', margin, margin, imgW, imgH);
       heightLeft -= (pageH - margin * 2);
+      while (heightLeft > 0) {
+        doc.addPage();
+        const positionY = margin - (imgH - heightLeft);
+        doc.addImage(imgData, 'PNG', margin, positionY, imgW, imgH);
+        heightLeft -= (pageH - margin * 2);
+      }
+      doc.save("Voltage_Anomaly_Report.pdf");
+      header.style.display = "none";
+      if (addedMarginPx) sagEl.style.marginTop = "";
     }
-
-    doc.save("Voltage_Anomaly_Report.pdf");
-    header.style.display = "none";
-
-    // Revert temporary margin change
-    if (addedMarginPx) sagEl.style.marginTop = "";
-  }
   </script>
 </body>
 </html>
