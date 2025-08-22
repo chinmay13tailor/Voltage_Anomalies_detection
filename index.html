@@ -44,15 +44,15 @@
       justify-content: space-between;
       align-items: center;
     }
-    .header-top img {
-      height: 80px;
-    }
+  .header-top img {
+   max-height: 60px; width: auto;
+   }
     .header-center {
       text-align: center;
       flex: 1;
     }
     .header-center h1 {
-      margin: 4px 0 0;
+      margin:  0;
       font-size: 30px;
       font-weight: bold;
     }
@@ -75,14 +75,40 @@
     }
 
     /* FOOTER */
-    .report-footer {
-      margin-top: 20px;
-      border-top: 1px solid #ccc;
-      padding-top: 10px;
-      display: flex;
-      justify-content: space-between;
-      font-size: 12px;
-    }
+.footer {
+  border: 1px solid #000;
+  margin-top: 30px;
+  padding: 10px;
+  font-size: 14px;
+}
+
+.remarks {
+  margin-bottom: 15px;
+  min-height: 40px;
+}
+
+.remarks-box {
+  border: 1px solid #000;
+  height: 40px;
+  margin-top: 5px;
+}
+
+.signatures {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.checked, .approved {
+  width: 45%;
+}
+
+.signature-line {
+  border-bottom: 1px solid #000;
+  height: 30px;
+  margin-top: 5px;
+}
+
 
     .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 20px 0; }
     .card { background: #fafafa; padding: 15px; text-align: center; border-radius: 6px; box-shadow: 0px 1px 4px rgba(0,0,0,0.1); min-height: 80px; display:flex; align-items:center; justify-content:center; font-weight:bold; }
@@ -148,7 +174,7 @@
     </div>
 
     <div class="summary">
-      <div class="card" id="maxImbalance">Max Imbalance_2 %: --</div>
+      <div class="card" id="maxImbalance">Max Imbalance_1 %: --</div>
       <div class="card" id="totalSags">Total Sag Events: --</div>
       <div class="card" id="totalSwells">Total Swell Events: --</div>
       <div class="card" id="minVoltage">Minimum Voltage: --</div>
@@ -177,12 +203,23 @@
     </div>
 
     <!-- FOOTER -->
-    <div class="report-footer" id="customFooter" style="display:none;">
-      <div>Remarks: ____________________________</div>
-      <div>Checked By: ____________________________</div>
-      <div>Confirmed By: __________________________</div>
+<div class="footer">
+  <div class="remarks">
+    <strong>Remarks :</strong>
+    <div class="remarks-box"></div>
+  </div>
+  <div class="signatures">
+    <div class="checked">
+      <strong>Checked By :</strong>
+      <div class="signature-line"></div>
+    </div>
+    <div class="approved">
+      <strong>Approved By :</strong>
+      <div class="signature-line"></div>
     </div>
   </div>
+</div>
+
 
   <script>
     const DEVICE_ID = "a41ff8c0-ce7c-11ef-826c-29d63551db41";  
