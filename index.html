@@ -234,6 +234,15 @@
 
     let lastData = [];
 
+    // ---- Default date: 11-Aug-2025 (input type='date' needs YYYY-MM-DD) ----
+    const DEFAULT_DATE_ISO = "2025-08-11";
+    // Set once on load; user can change it later
+    document.addEventListener("DOMContentLoaded", () => {
+    const dateInput = document.getElementById("reportDate");
+    if (dateInput && !dateInput.value) dateInput.value = DEFAULT_DATE_ISO;
+    });
+    // --
+
     async function fetchTelemetry(from, to) {
       const url = `${API_BASE_URL}/plugins/telemetry/DEVICE/${DEVICE_ID}/values/timeseries` +
                   `?keys=${encodeURIComponent(KEYS)}&startTs=${new Date(from).getTime()}&endTs=${new Date(to).getTime()}&limit=50000&agg=NONE`;
